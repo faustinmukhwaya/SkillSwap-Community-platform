@@ -1,10 +1,27 @@
+import json
+import os
 from prompt_toolkit import prompt
 from skillswap.models import User, Skill, Exchange
 from skillswap.utils import validate_non_empty_string, validate_email, find_by_attribute
 
+DATA_FILE = "skillswap_data.json"
+
 users = []
 skills = []
 exchanges = []
+
+def load_data():
+    if not os.path.exists(DATA_FILE):
+        return {"profiles": [], "proposals": []}
+    try:
+        with open(DATA_FILE, "r") as file:
+            return json.load(file)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return {"profiles": [], "proposals": []}
+
+def save_data(data):
+    with open(DATA_FILE, "w") as file:
+        json.dump(data, file, indent=4)
 
 def main_menu():
     while True:
@@ -239,6 +256,116 @@ def find_exchange_by_attribute():
             print("Exchange not found.")
     except ValueError as e:
         print(e)
+
+def create_profile(data):
+    name = input("Enter your name: ").strip()
+    if not name:
+        print("Error: Name cannot be empty.")
+        return
+
+    if any(profile["name"].lower() == name.lower() for profile in data["profiles"]):
+        print("Error: A profile with this name already exists.")
+        return
+
+    teach_skills = input("Enter skills you can teach (comma-separated): ").strip()
+    learn_skills = input("Enter skills you want to learn (comma-separated): ").strip()
+
+    if not teach_skills or not learn_skills:
+        print("Error: Skill lists cannot be empty.")
+        return
+
+    profile = {
+        "name": name,
+        "teach_skills": [skill.strip() for skill in teach_skills.split(",")],
+        "learn_skills": [skill.strip() for skill in learn_skills.split(",")]
+    }
+    data["profiles"].append(profile)
+    save_data(data)
+    print(f"Profile created for {name}.")
+
+def browse_skills(data):
+    if not data["profiles"]:
+        print("No skills available.")
+        return
+
+    skill_map = {}
+    for profile in data["profiles"]:
+        for skill in profile["teach_skills"]:
+            if skill not in skill_map:
+                skill_map[skill] = []
+            skill_map[skill].append(profile["name"])
+
+    print("Available Skills:")
+    for skill, users in skill_map.items():
+        print(f"{skill}: {', '.join(users)}")
+
+def propose_exchange(data):
+    proposer_name = input("Enter your name: ").strip()
+    proposer = next((profile for profile in data["profiles"] if profile["name"].lower() == proposer_name.lower()), None)
+
+    if not proposer:
+        print("Error: Profile not found.")
+        return
+
+    print("Available profiles:")
+    for idx, profile in enumerate(data["profiles"]):
+        if profile["name"].lower() != proposer_name.lower():
+            print(f"{idx}: {profile['name']}")
+
+    try:
+        target_index = int(input("Select a profile by index: ").strip())
+        target = data["profiles"][target_index]
+    except (ValueError, IndexError):
+        print("Error: Invalid index.")
+        return
+
+    if target["name"].lower() == proposer_name.lower():
+        print("Error: You cannot propose an exchange with yourself.")
+        return
+
+    teach_skill = input("Enter a skill you will teach: ").strip()
+    if teach_skill not in proposer["teach_skills"]:
+        print("Error: You do not have this skill to teach.")
+        return
+
+    learn_skill = input("Enter a skill you want to learn: ").strip()
+    if learn_skill not in target["teach_skills"]:
+        print("Error: The target does not have this skill to teach.")
+        return
+
+    proposal = {
+        "proposer": proposer_name,
+        "target": target["name"],
+        "teach_skill": teach_skill,
+        "learn_skill": learn_skill,
+        "status": "pending"
+    }
+    data["proposals"].append(proposal)
+    save_data(data)
+    print("Skill exchange proposal created.")
+
+def main():
+    data = load_data()
+
+    while True:
+        print("\nSkillSwap Community Platform")
+        print("1. Create Profile")
+        print("2. Browse Skills")
+        print("3. Propose Skill Exchange")
+        print("4. Exit")
+        choice = input("Choose an option: ").strip()
+
+        if choice == "1":
+            create_profile(data)
+        elif choice == "2":
+            browse_skills(data)
+        elif choice == "3":
+            propose_exchange(data)
+        elif choice == "4":
+            print("Exiting application.")
+            break
+        else:
+            print("Error: Invalid choice. Please try again.")
 
 if __name__ == "__main__":
     main_menu()
